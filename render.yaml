@@ -2,7 +2,6 @@ services:
   - type: web
     name: oa-school-api
     runtime: docker
-    region: singapore
     plan: free
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
@@ -42,7 +41,6 @@ services:
 
 databases:
   - name: oa-school-db
-    region: singapore
     plan: free
     postgresMajorVersion: "16"
     databaseName: oa_school
