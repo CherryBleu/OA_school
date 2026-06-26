@@ -13,6 +13,4 @@
 
 测试仓库(https://github.com/CherryBleu/test.git)
 
-测试任务需求
-
-见测试仓库README
+测试任务需求见测试仓库README
