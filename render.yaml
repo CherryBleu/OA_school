@@ -21,7 +21,7 @@ services:
       - key: LLM_API_KEY
         sync: false
       - key: LLM_BASE_URL
-        value: https://llm-api.net
+        value: https://llm-api.net/v1
       - key: LLM_MODEL
         value: gpt-5
 
