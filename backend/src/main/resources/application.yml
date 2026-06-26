@@ -1,0 +1,24 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: oa-school-backend
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 10MB
+
+app:
+  jwt-secret: ${JWT_SECRET:dev-only-change-me}
+  cors-origin: ${CORS_ORIGIN:http://localhost:5173,http://127.0.0.1:5173}
+  llm-api-key: ${LLM_API_KEY:}
+  llm-base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  llm-model: ${LLM_MODEL:gpt-4o-mini}
+  llm-timeout-ms: ${LLM_TIMEOUT_MS:45000}
+  repo-max-code-chars: ${REPO_MAX_CODE_CHARS:120000}
+  repo-clone-timeout-ms: ${REPO_CLONE_TIMEOUT_MS:90000}
