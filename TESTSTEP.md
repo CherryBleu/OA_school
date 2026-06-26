@@ -7,6 +7,13 @@
 5. 收到分配的任务后，完成后上传GitHub/Gitee连接，调用大模型评审。
 6. 评审通过后自动计算进度。
 
+
+
+项目网址
+
+```txt
+https://oa-school-web.onrender.com/
+
 测试仓库连接
 
 ```txt
