@@ -9,16 +9,9 @@
 
 
 
-项目网址
+项目网址(https://oa-school-web.onrender.com/)
 
-```txt
-https://oa-school-web.onrender.com/
-
-测试仓库连接
-
-```txt
-https://github.com/CherryBleu/test.git
-```
+测试仓库(https://github.com/CherryBleu/test.git)
 
 测试任务需求
 
