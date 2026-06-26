@@ -7,12 +7,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -27,11 +27,17 @@ public class LlmService {
   }
 
   public Map<String, Object> generateSkillQuiz(Map<String, Object> skill) {
+    int level = skillLevel(skill);
+    String requestSeed = UUID.randomUUID().toString();
     return chatJson(
         "你是校园项目协作系统里的技能核验官。只返回 JSON，不要 Markdown。",
         Map.of(
-            "task", "为用户生成 3 道实战核验题，题目要能判断是否真的具备该技能。",
+            "task", "为用户生成 3 道全新的实战核验题，不能复用上一套题。题目要能判断是否真的具备该技能。",
             "skill", skill,
+            "selfLevel", level,
+            "difficultyRule", "按 selfLevel 出题：1 星考基础识别和简单操作；2 星考常见任务；3 星考独立完成和排错；4 星考模块设计、协作和质量；5 星考架构权衡、性能优化和代码审查。",
+            "requestSeed", requestSeed,
+            "requestedAt", Instant.now().toString(),
             "outputShape", Map.of(
                 "questions", List.of(Map.of(
                     "id", "q1",
@@ -41,11 +47,7 @@ public class LlmService {
                 ))
             )
         ),
-        () -> Map.of("questions", List.of(
-            quiz("q1", skill.get("skill_tag") + " 核心概念", "请说明你在项目中如何使用 " + skill.get("skill_tag") + " 解决一个具体问题。"),
-            quiz("q2", "排错能力", "描述一次 " + skill.get("skill_tag") + " 相关故障或难点，以及你如何定位原因。"),
-            quiz("q3", "交付标准", "如果负责 " + skill.get("skill_tag") + " 模块，你会用哪些指标判断交付质量？")
-        ))
+        () -> fallbackSkillQuiz(skill, level, requestSeed)
     );
   }
 
@@ -220,8 +222,51 @@ public class LlmService {
     );
   }
 
+  private Map<String, Object> fallbackSkillQuiz(Map<String, Object> skill, int level, String requestSeed) {
+    String tag = String.valueOf(skill.getOrDefault("skill_tag", skill.getOrDefault("skillTag", "该技能")));
+    String suffix = requestSeed.substring(0, 8);
+    List<Map<String, Object>> questions = switch (level) {
+      case 1 -> List.of(
+          quiz("q1-" + suffix, tag + " 基础识别", "请用自己的话解释 " + tag + " 是什么，并给出一个最小使用场景。"),
+          quiz("q2-" + suffix, "入门操作", "如果要在课堂项目里第一次使用 " + tag + "，你会先完成哪 3 个准备步骤？"),
+          quiz("q3-" + suffix, "概念边界", "列出一个适合使用 " + tag + " 的场景和一个不适合的场景，并说明原因。")
+      );
+      case 2 -> List.of(
+          quiz("q1-" + suffix, tag + " 常见任务", "请描述你如何用 " + tag + " 完成一个常见功能，并写出关键步骤。"),
+          quiz("q2-" + suffix, "配置与验证", "给出一次 " + tag + " 配置后如何验证它生效的检查清单。"),
+          quiz("q3-" + suffix, "常见错误", "说出一个 " + tag + " 新手常见错误、表现现象和修复方法。")
+      );
+      case 3 -> List.of(
+          quiz("q1-" + suffix, tag + " 独立交付", "请设计一个可独立交付的小功能，说明你会如何使用 " + tag + " 实现。"),
+          quiz("q2-" + suffix, "问题定位", "描述一次 " + tag + " 相关问题的排查路径：你会先看什么、再验证什么？"),
+          quiz("q3-" + suffix, "质量标准", "如果你提交一个 " + tag + " 任务，至少需要哪些测试或验收点？")
+      );
+      case 4 -> List.of(
+          quiz("q1-" + suffix, tag + " 模块设计", "请为一个小组项目模块设计 " + tag + " 方案，说明边界、接口和协作方式。"),
+          quiz("q2-" + suffix, "复杂排错", "当 " + tag + " 模块在线上出现间歇性问题时，你会如何收集证据并缩小范围？"),
+          quiz("q3-" + suffix, "代码评审", "请列出评审同学 " + tag + " 代码时最关注的 5 个点，并说明风险。")
+      );
+      default -> List.of(
+          quiz("q1-" + suffix, tag + " 架构权衡", "请比较两种 " + tag + " 技术方案，说明性能、维护性和团队成本取舍。"),
+          quiz("q2-" + suffix, "优化方案", "一个 " + tag + " 模块变慢且难维护，你会如何制定优化计划和回滚预案？"),
+          quiz("q3-" + suffix, "专家审查", "请给出一份 " + tag + " 高风险变更的审查清单，包含监控、测试和发布策略。")
+      );
+    };
+    return Map.of("questions", questions, "requestSeed", requestSeed, "selfLevel", level);
+  }
+
   private Map<String, Object> quiz(String id, String title, String prompt) {
     return Map.of("id", id, "title", title, "prompt", prompt, "expectedKeywords", List.of("项目", "方案", "质量"));
+  }
+
+  private int skillLevel(Map<String, Object> skill) {
+    Object value = skill.containsKey("self_level") ? skill.get("self_level") : skill.get("selfLevel");
+    if (value instanceof Number number) return Math.max(1, Math.min(5, number.intValue()));
+    try {
+      return Math.max(1, Math.min(5, Integer.parseInt(String.valueOf(value))));
+    } catch (Exception ignored) {
+      return 3;
+    }
   }
 
   private List<String> asStringList(Object value) {

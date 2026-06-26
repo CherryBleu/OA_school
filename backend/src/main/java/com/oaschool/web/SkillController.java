@@ -6,6 +6,8 @@ import com.oaschool.common.Auth;
 import com.oaschool.common.Rows;
 import com.oaschool.service.LlmService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -105,9 +107,16 @@ public class SkillController {
   }
 
   @PostMapping("/{id}/quiz")
-  public Map<String, Object> quiz(@PathVariable UUID id, HttpServletRequest request) {
+  public ResponseEntity<Map<String, Object>> quiz(@PathVariable UUID id, HttpServletRequest request) {
     Map<String, Object> skill = getOwnedSkill(id, Auth.user(request).id());
-    return llm.generateSkillQuiz(Rows.normalize(skill));
+    Map<String, Object> normalizedSkill = Rows.normalize(skill);
+    Map<String, Object> payload = new LinkedHashMap<>(llm.generateSkillQuiz(normalizedSkill));
+    payload.put("skill", normalizedSkill);
+    payload.put("generatedAt", Instant.now().toString());
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-store, no-cache, max-age=0")
+        .header("Pragma", "no-cache")
+        .body(payload);
   }
 
   @PostMapping("/{id}/verify")

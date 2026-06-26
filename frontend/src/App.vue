@@ -124,7 +124,7 @@
         </el-card>
       </section>
 
-      <section v-if="view === 'skills'" class="skill-workspace" :class="{ 'has-quiz': quiz }">
+      <section v-if="view === 'skills'" class="skill-workspace" :class="{ 'has-quiz': quiz || quizGeneratingSkill }">
         <el-card class="skill-panel" shadow="never">
           <template #header><PanelTitle :icon="Medal" title="技能画像" /></template>
           <div class="skill-overview">
@@ -203,9 +203,9 @@
               <div class="skill-meter">
                 <div>
                   <span>自评等级</span>
-                  <b>{{ skill.self_level }}/5</b>
+                  <b>{{ skillLevelValue(skill) }}/5</b>
                 </div>
-                <i><em :style="{ width: skillLevelPercent(skill.self_level) }" /></i>
+                <i><em :style="{ width: skillLevelPercent(skillLevelValue(skill)) }" /></i>
               </div>
 
               <div class="skill-comment-list">
@@ -213,22 +213,44 @@
               </div>
 
               <div class="skill-card-actions">
-                <el-rate :model-value="skill.self_level" disabled />
-                <el-button type="primary" plain :icon="MagicStick" :loading="isActionBusy(`quiz:${skill.id}`)" @click="openQuiz(skill)">核验</el-button>
+                <div class="skill-level-edit" :class="{ 'is-saving': isSkillLevelSaving(skill.id) }">
+                  <el-rate
+                    :model-value="skillLevelValue(skill)"
+                    :clearable="false"
+                    :disabled="isSkillInteractionLocked(skill)"
+                    @change="updateSkillLevel(skill, $event)"
+                  />
+                  <span v-if="isSkillLevelSaving(skill.id)" class="level-saving-dot" aria-label="星级保存中" />
+                </div>
+                <el-button
+                  type="primary"
+                  plain
+                  :icon="MagicStick"
+                  :loading="isActionBusy(`quiz:${skill.id}`)"
+                  :disabled="isSkillQuizDisabled(skill)"
+                  @click="openQuiz(skill)"
+                >
+                  核验
+                </el-button>
               </div>
             </article>
             <el-empty v-if="skills.length === 0" class="skill-empty" description="暂无技能标签" />
           </div>
         </el-card>
 
-        <el-card v-if="quiz" class="quiz-card is-open" shadow="never">
+        <el-card v-if="quiz || quizGeneratingSkill" class="quiz-card is-open" shadow="never">
           <template #header>
             <div class="quiz-titlebar">
               <PanelTitle :icon="DocumentChecked" title="AI 试卷" />
               <el-button v-if="quiz" text :icon="CloseBold" @click="quiz = null">收起</el-button>
             </div>
           </template>
-          <div v-if="quiz" class="quiz-stack">
+          <div v-if="quizGeneratingSkill" class="quiz-loading-panel" aria-live="polite">
+            <span class="quiz-loading-spinner" aria-hidden="true"><i /></span>
+            <strong>AI 正在生成 {{ quizGeneratingSkill.skill_tag }} {{ skillLevelValue(quizGeneratingSkill) }} 星试卷</strong>
+            <span>根据当前星级调整题目难度，请稍候。</span>
+          </div>
+          <div v-else-if="quiz" class="quiz-stack">
             <div class="quiz-heading">
               <span>正在核验</span>
               <h3>{{ quiz.skill.skill_tag }}</h3>
@@ -612,7 +634,10 @@ const skillForm = ref({ skillTag: "", selfLevel: 3 });
 const skillCreatorOpen = ref(false);
 const skillSearch = ref("");
 const quiz = ref<any>(null);
+const quizGeneratingSkill = ref<any>(null);
 const answers = ref<Record<string, string>>({});
+const skillLevelDrafts = ref<Record<string, number>>({});
+const savingSkillLevelIds = ref<Record<string, boolean>>({});
 const requirementText = ref("");
 const requirementFile = ref<File | null>(null);
 const repoInputs = ref<Record<string, string>>({});
@@ -790,6 +815,17 @@ function skillInitial(skillTag: string) {
   return value ? value.slice(0, 1).toUpperCase() : "技";
 }
 
+function normalizeSkillLevel(level: any, fallback = 1) {
+  const value = Math.round(Number(level) || fallback);
+  return Math.max(1, Math.min(5, value));
+}
+
+function skillLevelValue(skill: any) {
+  const skillId = String(skill?.id || "");
+  const draft = skillLevelDrafts.value[skillId];
+  return normalizeSkillLevel(draft ?? skill?.self_level, 1);
+}
+
 function skillLevelPercent(level: any) {
   const value = Math.max(0, Math.min(5, Number(level) || 0));
   return `${value * 20}%`;
@@ -816,6 +852,64 @@ function skillCommentLines(skill: any) {
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 3);
+}
+
+function isSkillLevelSaving(skillId: any) {
+  return Boolean(savingSkillLevelIds.value[String(skillId || "")]);
+}
+
+function isSkillInteractionLocked(skill: any) {
+  return Boolean(skill?.is_verified) || isSkillLevelSaving(skill?.id) || isActionBusy(`quiz:${skill?.id}`);
+}
+
+function isSkillQuizDisabled(skill: any) {
+  return Boolean(quizGeneratingSkill.value) || isSkillLevelSaving(skill?.id) || isActionBusy("submitQuiz");
+}
+
+function clearSkillLevelDraft(skillId: string) {
+  const nextDrafts = { ...skillLevelDrafts.value };
+  delete nextDrafts[skillId];
+  skillLevelDrafts.value = nextDrafts;
+}
+
+function setSkillLevelSaving(skillId: string, saving: boolean) {
+  const nextSaving = { ...savingSkillLevelIds.value };
+  if (saving) nextSaving[skillId] = true;
+  else delete nextSaving[skillId];
+  savingSkillLevelIds.value = nextSaving;
+}
+
+async function updateSkillLevel(skill: any, nextLevel: any) {
+  if (!skill?.id || isSkillInteractionLocked(skill)) return;
+  const skillId = String(skill.id);
+  const level = normalizeSkillLevel(nextLevel, skillLevelValue(skill));
+  const previousLevel = normalizeSkillLevel(skill.self_level, 1);
+  if (level === previousLevel) {
+    clearSkillLevelDraft(skillId);
+    return;
+  }
+
+  skillLevelDrafts.value = { ...skillLevelDrafts.value, [skillId]: level };
+  setSkillLevelSaving(skillId, true);
+
+  try {
+    const payload = await api<any>("/skills", {
+      method: "POST",
+      body: { skillTag: skill.skill_tag, selfLevel: level }
+    });
+    skills.value = skills.value.map((item) => (item.id === skill.id ? { ...item, ...(payload.skill || {}) } : item));
+    clearSkillLevelDraft(skillId);
+    if (quiz.value?.skill?.id === skill.id) {
+      quiz.value = null;
+      answers.value = {};
+    }
+    ElMessage.success("星级已更新，下一次核验会重新生成试卷");
+  } catch (error: any) {
+    clearSkillLevelDraft(skillId);
+    ElMessage.error(error.message);
+  } finally {
+    setSkillLevelSaving(skillId, false);
+  }
 }
 
 function isTaskOpen(taskId: string) {
@@ -880,14 +974,17 @@ async function saveSkill() {
 
 async function openQuiz(skill: any) {
   actionBusy.value = `quiz:${skill.id}`;
+  const requestedSkill = { ...skill, self_level: skillLevelValue(skill) };
   try {
     quiz.value = null;
+    quizGeneratingSkill.value = requestedSkill;
     answers.value = {};
-    const payload = await api<any>(`/skills/${skill.id}/quiz`, { method: "POST" });
-    quiz.value = { skill, questions: payload.questions || [] };
+    const payload = await api<any>(`/skills/${skill.id}/quiz`, { method: "POST", cache: "no-store" });
+    quiz.value = { skill: payload.skill || requestedSkill, questions: payload.questions || [] };
   } catch (error: any) {
     ElMessage.error(error.message);
   } finally {
+    quizGeneratingSkill.value = null;
     actionBusy.value = "";
   }
 }
