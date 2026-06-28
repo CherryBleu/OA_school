@@ -614,6 +614,19 @@ section > .el-card {
     transform 0.18s ease;
 }
 
+.project-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
 .project-list-card .project-row {
   min-height: 88px;
   align-items: stretch;

@@ -108,17 +108,29 @@
         <el-card class="full project-list-card" shadow="never">
           <template #header><PanelTitle :icon="Folder" title="我的项目" /></template>
           <div class="project-list">
-            <button v-for="project in projects" :key="project.id" class="project-row" @click="loadWorkspace(project.id)">
-              <div>
-                <strong>{{ project.name }}</strong>
-                <span>{{ project.description || "未填写说明" }}</span>
-              </div>
+            <article v-for="project in projects" :key="project.id" class="project-row">
+              <button class="project-row-main" type="button" @click="loadWorkspace(project.id)">
+                <div>
+                  <strong>{{ project.name }}</strong>
+                  <span>{{ project.description || "未填写说明" }}</span>
+                </div>
+              </button>
               <div class="project-meta">
                 <span class="code">{{ project.group_id }}</span>
                 <span>{{ project.members_count }} 人</span>
                 <span>{{ Number(project.project_progress || 0).toFixed(0) }}%</span>
+                <el-button
+                  v-if="canDeleteProject(project)"
+                  text
+                  circle
+                  type="danger"
+                  :icon="Delete"
+                  :loading="isActionBusy(`deleteProject:${project.id}`)"
+                  aria-label="删除项目"
+                  @click.stop="deleteProject(project)"
+                />
               </div>
-            </button>
+            </article>
             <el-empty v-if="projects.length === 0" description="暂无项目" />
           </div>
         </el-card>
@@ -470,6 +482,7 @@
 import * as echarts from "echarts";
 import {
   CloseBold,
+  Delete,
   DocumentChecked,
   Folder,
   Grid,
@@ -705,6 +718,11 @@ function isActionBusy(key: string) {
   return actionBusy.value === key;
 }
 
+function canDeleteProject(project: any) {
+  if (!user.value || !project) return false;
+  return project.member_role === "leader" || project.owner_id === user.value.id;
+}
+
 function toggleProjectAction(action: "create" | "join") {
   projectAction.value = projectAction.value === action ? "" : action;
 }
@@ -777,6 +795,27 @@ async function createProject() {
     await loadProjects();
     await loadWorkspace(payload.project.id);
     ElMessage.success("项目已创建");
+  } catch (error: any) {
+    ElMessage.error(error.message);
+  } finally {
+    actionBusy.value = "";
+  }
+}
+
+async function deleteProject(project: any) {
+  if (!project?.id || !canDeleteProject(project)) return;
+  const confirmed = window.confirm(`确定删除项目“${project.name}”吗？项目、成员、任务和提交记录都会删除。`);
+  if (!confirmed) return;
+  actionBusy.value = `deleteProject:${project.id}`;
+  try {
+    await api(`/project/${project.id}`, { method: "DELETE" });
+    if (workspace.value?.project?.id === project.id) {
+      workspace.value = null;
+      view.value = "projects";
+      socket.value?.close();
+    }
+    await loadProjects();
+    ElMessage.success("项目已删除");
   } catch (error: any) {
     ElMessage.error(error.message);
   } finally {
