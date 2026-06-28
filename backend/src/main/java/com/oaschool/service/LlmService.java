@@ -192,10 +192,19 @@ public class LlmService {
           "description", text,
           "category", categories[i % categories.length],
           "estimatedDays", i < 2 ? 1.5 : 2,
-          "features", List.of(text.substring(0, Math.min(text.length(), 14)) + "可用", "输入校验完整", "异常状态有反馈")
+          "features", List.of(featureText(text), "输入校验完整", "异常状态有反馈")
       ));
     }
     return Map.of("tasks", tasks);
+  }
+
+  private String featureText(String text) {
+    String feature = text.substring(0, Math.min(text.length(), 14)).trim()
+        .replaceAll("[。；;，,]+$", "")
+        .replaceAll("(可用){2,}$", "可用")
+        .replaceAll("可用用+$", "可用")
+        .replaceAll("可可用$", "可用");
+    return feature.endsWith("可用") ? feature : feature + "可用";
   }
 
   private Map<String, Object> fallbackReview(List<String> features, String codeText) {

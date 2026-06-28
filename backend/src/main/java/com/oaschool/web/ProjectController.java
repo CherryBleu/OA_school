@@ -13,10 +13,12 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -302,7 +304,7 @@ public class ProjectController {
       String category = text(task, "category");
       if (category.isBlank()) category = "通用";
       double estimatedDays = Math.max(0.5, decimal(task.get("estimatedDays"), 1));
-      String features = MAPPER.writeValueAsString(asStringList(task.get("features")));
+      String features = MAPPER.writeValueAsString(cleanFeatureList(task.get("features"), title));
 
       Map<String, Object> row = jdbc.queryForMap(
           """
@@ -381,5 +383,39 @@ public class ProjectController {
   private List<String> asStringList(Object value) {
     if (value instanceof List<?> list) return list.stream().map(String::valueOf).toList();
     return List.of();
+  }
+
+  private List<String> cleanFeatureList(Object value, String title) {
+    Set<String> features = new LinkedHashSet<>();
+    for (String feature : asStringList(value)) {
+      String cleaned = cleanFeatureText(feature);
+      if (!cleaned.isBlank()) features.add(cleaned);
+      if (features.size() >= 8) break;
+    }
+    if (features.isEmpty()) {
+      features.add(cleanFeatureText(title));
+    }
+    features.add("输入校验完整");
+    features.add("异常状态有反馈");
+    return List.copyOf(features);
+  }
+
+  private String cleanFeatureText(String value) {
+    String cleaned = value == null ? "" : value.trim();
+    cleaned = cleaned
+        .replaceAll("\\s+", " ")
+        .replaceAll("[。；;，,]+$", "")
+        .replaceAll("(可用){2,}$", "可用")
+        .replaceAll("可用用+$", "可用")
+        .replaceAll("可可用$", "可用");
+    if (!cleaned.isBlank()
+        && !cleaned.endsWith("可用")
+        && !cleaned.endsWith("完整")
+        && !cleaned.endsWith("反馈")
+        && !cleaned.endsWith("通过")
+        && !cleaned.endsWith("完成")) {
+      cleaned = cleaned + "可用";
+    }
+    return cleaned.length() > 80 ? cleaned.substring(0, 80) : cleaned;
   }
 }
