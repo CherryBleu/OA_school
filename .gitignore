@@ -47,3 +47,17 @@ Desktop.ini
 
 # Local review/test repository
 ai-review-test-repo/
+
+
+# report
+.agents
+.report_build
+
+# test results
+*.jtl
+
+.gitignore
+
+#docs
+*.docx
+*.ppt
